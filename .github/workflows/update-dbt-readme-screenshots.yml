@@ -1,0 +1,96 @@
+name: Update dbt doc screenshots
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-screenshots:
+    runs-on: ubuntu-latest
+    environment: dbt-docs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dbt
+        run: |
+          python -m pip install --upgrade pip
+          pip install dbt-postgres
+
+      - name: Create dbt profile
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml <<EOF
+          leads_metrics:
+            target: ci
+            outputs:
+              ci:
+                type: postgres
+                host: ${{ secrets.SUPABASE_DBT_HOST }}
+                port: ${{ secrets.SUPABASE_DBT_PORT }}
+                user: ${{ secrets.SUPABASE_DBT_USER }}
+                password: ${{ secrets.SUPABASE_DBT_PASSWORD }}
+                dbname: ${{ secrets.SUPABASE_DBT_DBNAME }}
+                schema: ${{ secrets.SUPABASE_DBT_SCHEMA }}
+                threads: 1
+          EOF
+
+      - name: Install Node deps
+        run: npm install
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build dbt project and docs
+        run: |
+          cd leads_metrics
+          dbt build
+          dbt docs generate
+
+      - name: Prepare static docs site
+        run: |
+          cd leads_metrics
+          mkdir -p site
+          cp target/index.html site/
+          cp target/manifest.json site/
+          cp target/catalog.json site/
+
+      - name: Start local docs server
+        run: |
+          python -m http.server 8081 --directory site > /tmp/dbt-docs.log 2>&1 &
+          echo $! > /tmp/dbt-docs.pid
+          sleep 5
+
+      - name: Capture screenshots
+        env:
+          DBT_DOCS_URL: http://127.0.0.1:8081
+        run: npm run docs:screenshots
+
+      - name: Stop local docs server
+        if: always()
+        run: |
+          kill $(cat /tmp/dbt-docs.pid) || true
+
+      - name: Commit screenshots
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/*.png README.md
+          git diff --cached --quiet || git commit -m "Update dbt docs screenshots"
+
+      - name: Push changes
+        run: |
+          git push

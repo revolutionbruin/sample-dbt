@@ -1,0 +1,10 @@
+{
+  "name": "leads-metrics-doc-screenshots",
+  "private": true,
+  "scripts": {
+    "docs:screenshots": "node scripts/screenshot-docs.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.54.0"
+  }
+}
