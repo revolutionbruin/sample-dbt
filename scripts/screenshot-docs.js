@@ -16,10 +16,7 @@ function findFirstExistingPath(candidates) {
 }
 
 function loadManifest() {
-  const explicit = process.env.DBT_MANIFEST_PATH;
   const candidates = [
-    explicit,
-    path.join(process.cwd(), 'site', 'manifest.json'),
     path.join(process.cwd(), 'target', 'manifest.json'),
     path.join(process.cwd(), 'leads_metrics', 'target', 'manifest.json')
   ];
@@ -28,7 +25,7 @@ function loadManifest() {
 
   if (!manifestPath) {
     throw new Error(
-      `Could not find manifest.json. Checked:\n${candidates.filter(Boolean).join('\n')}`
+      `Could not find manifest.json. Checked:\n${candidates.join('\n')}`
     );
   }
 
@@ -37,148 +34,168 @@ function loadManifest() {
 }
 
 function getModelUniqueId(manifest, modelName) {
-  const nodes = manifest.nodes || {};
+  const models = Object.values(manifest.nodes || {})
+    .filter((node) => (node.unique_id || '').startsWith('model.'))
+    .map((node) => ({
+      name: node.name,
+      unique_id: node.unique_id
+    }));
 
-  for (const node of Object.values(nodes)) {
-    if (node.resource_type === 'model' && node.name === modelName) {
-      return node.unique_id;
-    }
+  console.log(
+    'Available models:',
+    models.map((m) => `${m.name} -> ${m.unique_id}`).join(', ')
+  );
+
+  const match = models.find((m) => m.name === modelName);
+
+  if (!match) {
+    throw new Error(`Model not found in manifest: ${modelName}`);
   }
 
-  throw new Error(`Could not find model "${modelName}" in manifest.json`);
+  return match.unique_id;
 }
 
-async function clickIfVisible(locator, label = 'locator') {
-  const count = await locator.count();
-  if (!count) {
-    console.log(`No matches for ${label}`);
-    return false;
-  }
-
-  const first = locator.first();
-
-  try {
-    await first.waitFor({ state: 'visible', timeout: 3000 });
-    await first.click();
-    console.log(`Clicked ${label}`);
-    return true;
-  } catch (err) {
-    console.log(`Could not click ${label}: ${err.message}`);
-    return false;
-  }
+async function gotoDocs(page, url) {
+  console.log(`Navigating to: ${url}`);
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await wait(4000);
 }
 
-async function tryOpenGraph(page) {
-  const strategies = [
-    {
-      label: 'data-original-title',
-      locator: page.locator('[data-original-title="View Lineage Graph"]')
-    },
-    {
-      label: 'title',
-      locator: page.locator('[title="View Lineage Graph"]')
-    },
-    {
-      label: 'ng-click',
-      locator: page.locator('[ng-click="onLauncherClick()"]')
-    },
-    {
-      label: 'tooltip contains lineage',
-      locator: page.locator('[data-original-title*="Lineage"]')
-    },
-    {
-      label: 'graph icon use href',
-      locator: page.locator('a:has(svg use[xlink\\:href="#icn-flow"])')
-    }
+async function screenshot(page, file) {
+  await page.screenshot({ path: file, fullPage: true });
+  console.log(`Saved: ${file}`);
+}
+
+async function openOverviewGraph(page) {
+  const selectors = [
+    '[title="View Lineage Graph"]',
+    '[data-original-title="View Lineage Graph"]',
+    '[ng-click="onLauncherClick()"]'
   ];
 
-  for (const strategy of strategies) {
-    const clicked = await clickIfVisible(strategy.locator, strategy.label);
-    if (clicked) {
-      await wait(2500);
-      return true;
+  for (const selector of selectors) {
+    const locator = page.locator(selector);
+    const count = await locator.count();
+    console.log(`Overview graph selector ${selector} count: ${count}`);
+
+    if (count > 0) {
+      try {
+        await locator.first().click();
+        console.log(`Clicked overview graph launcher via ${selector}`);
+        await wait(3000);
+        return true;
+      } catch (err) {
+        console.log(`Could not click overview graph launcher via ${selector}: ${err.message}`);
+      }
     }
   }
 
-  console.log('Graph launcher not found');
+  console.log('Overview graph launcher not found');
   return false;
 }
 
-async function gotoDocsRoute(page, baseUrl, hashRoute) {
-  const url = `${baseUrl}/${hashRoute}`;
-  console.log(`Navigating to: ${url}`);
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await wait(2500);
-}
+async function closeLineageOverlayIfOpen(page) {
+  const closeSelectors = [
+    '[ng-click="close()"]',
+    '[aria-label="Close"]',
+    '.modal .close',
+    '.lineage-graph .close',
+    'text=×'
+  ];
 
-async function screenshotFullPage(page, outputPath) {
-  await wait(1000);
-  await page.screenshot({ path: outputPath, fullPage: true });
-  console.log(`Saved screenshot: ${outputPath}`);
-}
+  for (const selector of closeSelectors) {
+    const locator = page.locator(selector);
+    const count = await locator.count();
+    console.log(`Close selector ${selector} count: ${count}`);
 
-async function captureHome(page, baseUrl) {
-  await gotoDocsRoute(page, baseUrl, '#!/overview');
-  await screenshotFullPage(page, 'assets/dbt-docs-home.png');
-}
-
-async function captureOverviewGraph(page, baseUrl) {
-  await gotoDocsRoute(page, baseUrl, '#!/overview');
-  const opened = await tryOpenGraph(page);
-
-  if (!opened) {
-    console.log('Falling back to overview screenshot because lineage graph launcher was not found.');
-  }
-
-  await screenshotFullPage(page, 'assets/dbt-docs-graph.png');
-}
-
-async function captureModelPage(page, baseUrl, manifest, modelName, outputPath, graphOutputPath = null) {
-  const uniqueId = getModelUniqueId(manifest, modelName);
-
-  await gotoDocsRoute(page, baseUrl, `#!/model/${uniqueId}`);
-  await screenshotFullPage(page, outputPath);
-
-  if (graphOutputPath) {
-    const opened = await tryOpenGraph(page);
-
-    if (!opened) {
-      console.log(`Lineage graph launcher not found on ${modelName}; using model page as fallback.`);
+    if (count > 0) {
+      try {
+        await locator.first().click();
+        console.log(`Closed lineage overlay via ${selector}`);
+        await wait(3000);
+        return true;
+      } catch (err) {
+        console.log(`Could not close overlay via ${selector}: ${err.message}`);
+      }
     }
-
-    await screenshotFullPage(page, graphOutputPath);
   }
+
+  console.log('No close control found for lineage overlay');
+  return false;
 }
 
-(async () => {
-  const browser = await chromium.launch({ headless: true });
+async function withNewPage(browser, fn) {
   const page = await browser.newPage({
     viewport: { width: 1600, height: 1100 }
   });
+
+  try {
+    await fn(page);
+  } finally {
+    await page.close();
+  }
+}
+
+async function captureOverview(browser, baseUrl) {
+  await withNewPage(browser, async (page) => {
+    await gotoDocs(page, `${baseUrl}/#!/overview`);
+    await screenshot(page, 'assets/dbt-homepage.png');
+  });
+}
+
+async function captureOverviewGraph(browser, baseUrl) {
+  await withNewPage(browser, async (page) => {
+    await gotoDocs(page, `${baseUrl}/#!/overview`);
+    await openOverviewGraph(page);
+    await screenshot(page, 'assets/dbt-lineage-overview.png');
+  });
+}
+
+async function captureModel(browser, baseUrl, manifest, modelName, outputFile) {
+  await withNewPage(browser, async (page) => {
+    const uniqueId = getModelUniqueId(manifest, modelName);
+    const url = `${baseUrl}/#!/model/${uniqueId}`;
+
+    await gotoDocs(page, url);
+    await closeLineageOverlayIfOpen(page);
+    await wait(2000);
+
+    await screenshot(page, outputFile);
+  });
+}
+
+(async () => {
+  const browser = await chromium.launch({ headless: false });
 
   const baseUrl = process.env.DBT_DOCS_URL || 'http://127.0.0.1:8081';
   const manifest = loadManifest();
 
   try {
-    await captureHome(page, baseUrl);
-    await captureOverviewGraph(page, baseUrl);
+    await captureOverview(browser, baseUrl);
+    await captureOverviewGraph(browser, baseUrl);
 
-    await captureModelPage(
-      page,
+    await captureModel(
+      browser,
+      baseUrl,
+      manifest,
+      'stg_leads',
+      'assets/stg_leads.png'
+    );
+
+    await captureModel(
+      browser,
       baseUrl,
       manifest,
       'int_lead_engagement',
-      'assets/dbt-int-lead-engagement.png',
-      'assets/dbt-int-lead-engagement-graph.png'
+      'assets/int_lead_engagement.png'
     );
 
-    await captureModelPage(
-      page,
+    await captureModel(
+      browser,
       baseUrl,
       manifest,
       'fct_lead_kpis_daily',
-      'assets/dbt-fct-lead-kpis-daily.png',
-      'assets/dbt-fct-lead-kpis-daily-graph.png'
+      'assets/fct_lead_kpis_daily.png'
     );
   } finally {
     await browser.close();

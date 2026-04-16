@@ -1,0 +1,97 @@
+version: 2
+
+models:
+  - name: stg_leads
+    description: |
+      Staging model for raw lead records from the application database.
+
+      This model standardizes lead-level fields from `public.leads` and serves as
+      the primary cleaned source for downstream recruiter funnel analysis.
+
+      Each row represents a single lead. The model preserves operational timestamps
+      such as lead creation, resume submission, and recruiter engagement start
+      via `tour_began_at`.
+
+    columns:
+      - name: lead_id
+        description: Unique identifier for the lead.
+        tests:
+          - not_null
+          - unique
+
+      - name: tour_id
+        description: Identifier linking a lead to a guided tour or recruiter workflow instance.
+
+      - name: company
+        description: Company associated with the lead or target application.
+
+      - name: role
+        description: Role associated with the lead or target application.
+
+      - name: status
+        description: |
+          Current application or funnel status for the lead.
+
+          Known values currently include:
+          - `not_applied`
+          - `tour_began`
+          - `resume_submitted`
+          - `interview_scheduled`
+          - `rejected`
+        tests:
+          - not_null
+
+      - name: resume_submitted_at
+        description: Timestamp when the candidate submitted a resume, if applicable.
+
+      - name: notes
+        description: Freeform operational notes associated with the lead.
+
+      - name: created_at
+        description: Timestamp when the lead record was created.
+        tests:
+          - not_null
+
+      - name: updated_at
+        description: Timestamp when the lead record was last updated.
+
+      - name: tour_began_at
+        description: |
+          Timestamp representing when recruiter-side tour engagement began.
+
+          This field is intended to be a direct operational capture of the
+          engagement start time and is preferred over using `updated_at` as a proxy.
+
+
+  - name: stg_tour_events
+    description: |
+      Staging model for raw tour event records from the application database.
+
+      This model standardizes recruiter or workflow-related interaction events
+      captured in `public.tour_events`.
+
+      Each row represents a single event associated with a `tour_id`. These events
+      are used downstream to derive event-based engagement timestamps.
+
+    columns:
+      - name: event_id
+        description: Unique identifier for the event record.
+        tests:
+          - not_null
+          - unique
+
+      - name: tour_id
+        description: Identifier linking the event to a lead tour or recruiter workflow instance.
+        tests:
+          - not_null
+
+      - name: event_type
+        description: Type of tour event captured in the source system.
+
+      - name: first_seen_at
+        description: Timestamp when the event was first observed.
+        tests:
+          - not_null
+
+      - name: page_path
+        description: Application page path associated with the recorded event, if available.

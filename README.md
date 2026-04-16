@@ -6,15 +6,15 @@ The goal is to transform raw operational data into a reliable, well-documented K
 
 ## Documentation Preview
 
-These screenshots are generated automatically from the local dbt docs build and focus on the documented analytics layer.
+![dbt homepage](assets/dbt-homepage.png)
 
-![dbt docs home](assets/dbt-docs-home.png)
+![dbt overall lineage](assets/dbt-lineage-overview.png)
 
-![dbt lineage graph](assets/dbt-docs-graph.png)
+![stg_leads model docs](assets/stg_leads.png)
 
-![int_lead_engagement docs](assets/dbt-int-lead-engagement.png)
+![int_lead_engagement model docs](assets/int_lead_engagement.png)
 
-![fct_lead_kpis_daily docs](assets/dbt-fct-lead-kpis-daily.png)
+![fct_lead_kpis_daily model docs](assets/fct_lead_kpis_daily.png)
 
 Overview
 

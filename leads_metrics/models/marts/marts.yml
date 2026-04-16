@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: fct_lead_kpis_daily
+    description: |
+      Daily lead KPI fact table for recruiter funnel reporting.
+
+      This model aggregates lead-level business logic from `int_lead_engagement`
+      to a daily grain based on lead creation date.
+
+      It is intended for lightweight reporting, trend analysis, and validation
+      of recruiter funnel performance over time.
+
+      Metrics in this model distinguish between:
+      - lead creation volume
+      - candidate conversion
+      - recruiter engagement
+      - rejection outcomes
+
+      Each row represents one calendar day.
+
+    columns:
+      - name: metric_date
+        description: Calendar date of lead creation used as the reporting grain.
+        tests:
+          - not_null
+          - unique
+
+      - name: leads_created
+        description: Number of leads created on the metric date.
+
+      - name: resumes_submitted
+        description: Number of leads with a submitted resume.
+
+      - name: resume_submission_rate
+        description: |
+          Share of created leads that resulted in a submitted resume.
+
+          Defined as:
+          `resumes_submitted / leads_created`
+
+      - name: rejected_leads
+        description: Number of leads with rejected status.
+
+      - name: rejection_rate
+        description: |
+          Share of created leads that were rejected.
+
+          Defined as:
+          `rejected_leads / leads_created`
+
+      - name: engaged_within_7d_leads
+        description: |
+          Number of leads with recruiter-side engagement within 7 days of creation.
+
+          Engagement is based on the canonical `engagement_at` timestamp derived
+          from either `tour_began_at` or the earliest tour event.
+
+      - name: engagement_7d_rate
+        description: |
+          Share of created leads that were engaged by the recruiter within 7 days.
+
+          Defined as:
+          `engaged_within_7d_leads / leads_created`

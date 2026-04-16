@@ -1,0 +1,117 @@
+version: 2
+
+models:
+  - name: int_lead_engagement
+    description: |
+      Intermediate lead-grain model that defines canonical recruiter funnel logic.
+
+      This model combines cleaned lead records with tour event history to derive
+      key business flags and timestamps used in KPI reporting.
+
+      The primary purpose of this model is to determine whether a lead was engaged
+      within 7 days of creation using the earliest available recruiter-side
+      engagement signal.
+
+      Engagement is defined using the earliest of:
+      - `stg_leads.tour_began_at`
+      - earliest matching `stg_tour_events.first_seen_at`
+
+      This model also separates three important concepts:
+      - candidate conversion (`resume_submitted_flag`)
+      - recruiter engagement (`engaged_within_7d_flag`)
+      - final negative disposition (`rejected_flag`)
+
+      Each row represents a single lead.
+
+    columns:
+      - name: lead_id
+        description: Unique identifier for the lead.
+        tests:
+          - not_null
+          - unique
+
+      - name: tour_id
+        description: Identifier linking the lead to a guided tour or recruiter workflow instance.
+
+      - name: company
+        description: Company associated with the lead or target application.
+
+      - name: role
+        description: Role associated with the lead or target application.
+
+      - name: status
+        description: Current lead status carried forward from staging.
+
+      - name: created_at
+        description: Timestamp when the lead record was created.
+
+      - name: updated_at
+        description: Timestamp when the lead record was last updated.
+
+      - name: resume_submitted_at
+        description: Timestamp when the candidate submitted a resume, if applicable.
+
+      - name: tour_began_at
+        description: |
+          Recruiter-side engagement start timestamp captured directly on the lead record.
+
+          This field represents the preferred operational timestamp for tour initiation
+          when available.
+
+      - name: first_event_at
+        description: |
+          Earliest event timestamp observed for the lead's `tour_id` based on
+          `stg_tour_events.first_seen_at`.
+
+          This field acts as the event-stream-derived engagement timestamp.
+
+      - name: engagement_at
+        description: |
+          Canonical engagement timestamp for the lead.
+
+          Defined as the earliest available timestamp from:
+          - `tour_began_at`
+          - `first_event_at`
+
+          This field is used to determine whether recruiter-side engagement occurred
+          within 7 days of lead creation.
+
+      - name: resume_submitted_flag
+        description: |
+          Indicator that the candidate submitted a resume.
+
+          This is modeled as a candidate-side conversion event and is intentionally
+          kept separate from recruiter engagement.
+
+      - name: rejected_flag
+        description: |
+          Indicator that the lead reached a rejected status.
+
+          This is modeled as a disposition outcome and is intentionally kept
+          separate from recruiter engagement.
+
+      - name: engaged_within_7d_flag
+        description: |
+          Indicator that recruiter-side engagement occurred within 7 days of lead creation.
+
+          A lead is counted as engaged within 7 days when:
+          - `engagement_at` is not null
+          - `engagement_at >= created_at`
+          - `engagement_at < created_at + interval '7 day'`
+
+          This metric is intended to capture recruiter-side interaction timing rather
+          than candidate-side conversion actions.
+
+      - name: tour_began_within_7d_flag
+        description: |
+          Indicator that `tour_began_at` occurred within 7 days of lead creation.
+
+          This field is useful for debugging and reconciling recruiter-side engagement
+          timing sourced directly from the leads table.
+
+      - name: event_within_7d_flag
+        description: |
+          Indicator that the earliest recorded tour event occurred within 7 days of lead creation.
+
+          This field is useful for debugging and reconciling engagement timing sourced
+          from the event stream.
